@@ -300,6 +300,289 @@ func HttpRequest(url, method, body, charset, contentType string, headSet map[str
 }
 
 /**
+* 模拟http请求
+* @url		string  需要抓取的url
+* @method	string	请求方式，POST，GET，PUT等
+* @body		string	需要传递的值
+* @charset	string	字符编码
+* @contentType string 定义http请求的文档格式，默认string
+* @headSet	map[string] string	请求需要带上的头
+ */
+func HttpRequestWithRespExactHeader(url, method, body, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
+	src := ""
+	httpStart := false
+
+	statusCode := 101
+	respHeaderExact := ""
+
+	if len(charset) < 1 {
+		charset = "utf-8"
+	}
+	if len(method) < 1 {
+		method = "POST"
+	}
+	sContentType := "text/html"
+	if method == "POST" {
+		sContentType = "application/x-www-form-urlencoded"
+	}
+	if len(contentType) < 1 {
+		contentType = sContentType
+	}
+
+	var req *http.Request
+	var err error
+	var ioread io.Reader
+
+	if len(body) > 0 {
+		ioread = strings.NewReader(body)
+	}
+
+	//连续10次尝试
+	for i := 0; i < 10; i++ {
+		req, err = http.NewRequest(method, url, ioread)
+		if err == nil {
+			//如果成功了，跳出
+			httpStart = true
+			break
+		}
+	}
+	//如果10次尝试后，都不能连接
+	if err != nil {
+		LogsWithFileName("", "http_error", url+err.Error())
+		return err.Error(), 503, ""
+	}
+
+	//使用完连接后关闭
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+
+	//执行连接
+	tr := &http.Transport{DisableKeepAlives: true,
+		Dial: func(netw, addr string) (net.Conn, error) {
+			c, err := net.DialTimeout(netw, addr, time.Second*60) //设置建立连接超时
+			if err != nil {
+				return nil, err
+			}
+			c.SetDeadline(time.Now().Add(30 * time.Second))     //设置发送接收数据超时
+			c.SetReadDeadline(time.Now().Add(30 * time.Second)) //设置发送接收数据超时
+			return c, nil
+		}}
+	client := &http.Client{Transport: tr}
+
+	//只有连接成功后，才会写入头的读取字节流
+	if httpStart == true {
+		//模拟一个host
+		sHost := ""
+		u, err := c_url.Parse(url)
+		if err == nil {
+			sHost = u.Host
+		}
+
+		//接收的格式
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		//连接使用后关闭
+		req.Header.Set("Connection", "close")
+		//设置host
+		req.Header.Set("Host", sHost)
+		//前一个网页
+		req.Header.Set("Referer", sHost)
+		//设置字符集和文档类型
+		req.Header.Set("Content-Type", fmt.Sprintf("%s;charset=%s;", contentType, charset))
+		req.Header.Set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate")
+		//设置浏览器
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36")
+		//
+		//req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "")
+
+		//将自定义的head填入
+		if len(headSet) > 0 {
+			for k, v := range headSet {
+				req.Header.Add(k, v)
+			}
+		}
+
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			statusCode = resp.StatusCode
+			respHeaderExact = resp.Header.Get(exactHeader)
+
+			/*var reader io.ReadCloser
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				reader, err = gzip.NewReader(resp.Body)
+				if err != nil {
+					src = err.Error()
+					statusCode = 503
+				}
+			} else {
+				reader = resp.Body
+			}*/
+
+			body, err := ioutil.ReadAll(resp.Body)
+
+			if err == nil {
+				src = string(body)
+			} else {
+				LogsWithFileName("", "http_error", url+err.Error())
+				src = err.Error()
+				statusCode = 503
+			}
+		} else {
+			LogsWithFileName("", "http_error", url+err.Error())
+			src = err.Error()
+			statusCode = 503
+		}
+	}
+	return src, statusCode, respHeaderExact
+}
+
+/**
+* 模拟http 表单请求
+* @url		string  需要抓取的url
+* @method	string	请求方式，POST，GET，PUT等
+* @body		string	需要传递的值
+* @charset	string	字符编码
+* @contentType string 定义http请求的文档格式，默认string
+* @headSet	map[string] string	请求需要带上的头
+ */
+func HttpFormRequestWithRespExactHeader(url string, method string, pams string, params map[string]string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
+	src := ""
+	httpStart := false
+
+	statusCode := 101
+	respHeaderExact := ""
+
+	if len(charset) < 1 {
+		charset = "utf-8"
+	}
+	if len(method) < 1 {
+		method = "POST"
+	}
+	sContentType := "text/html"
+	if method == "POST" {
+		sContentType = "application/x-www-form-urlencoded"
+	}
+	if len(contentType) < 1 {
+		contentType = sContentType
+	}
+
+	var req *http.Request
+	var err error
+
+	values, _ := c_url.ParseQuery(pams)
+	//连续10次尝试
+	for i := 0; i < 10; i++ {
+		req, err = http.NewRequest(method, url, strings.NewReader(values.Encode()))
+		if err == nil {
+			//如果成功了，跳出
+			httpStart = true
+			break
+		}
+	}
+	//req.PostForm=values
+	//err = req.ParseForm()
+	//
+	//fmt.Println(err)
+
+	//如果10次尝试后，都不能连接
+	if err != nil {
+		LogsWithFileName("", "http_error", url+err.Error())
+		return err.Error(), 503, ""
+	}
+	////如果10次尝试后，都不能连接
+	if err != nil {
+		LogsWithFileName("", "http_error", url+err.Error())
+		return err.Error(), 503, ""
+	}
+
+	//使用完连接后关闭
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+
+	//执行连接
+	tr := &http.Transport{DisableKeepAlives: true,
+		Dial: func(netw, addr string) (net.Conn, error) {
+			c, err := net.DialTimeout(netw, addr, time.Second*60) //设置建立连接超时
+			if err != nil {
+				return nil, err
+			}
+			c.SetDeadline(time.Now().Add(30 * time.Second))     //设置发送接收数据超时
+			c.SetReadDeadline(time.Now().Add(30 * time.Second)) //设置发送接收数据超时
+			return c, nil
+		}}
+	client := &http.Client{Transport: tr}
+
+	//只有连接成功后，才会写入头的读取字节流
+	if httpStart == true {
+		//模拟一个host
+		sHost := ""
+		u, err := c_url.Parse(url)
+		if err == nil {
+			sHost = u.Host
+		}
+
+		//接收的格式
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		//连接使用后关闭
+		req.Header.Set("Connection", "close")
+		//设置host
+		req.Header.Set("Host", sHost)
+		//前一个网页
+		req.Header.Set("Referer", sHost)
+		//设置字符集和文档类型
+		req.Header.Set("Content-Type", fmt.Sprintf("%s;charset=%s;", contentType, charset))
+		req.Header.Set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate")
+		//设置浏览器
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36")
+		//
+		//req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "")
+
+		//将自定义的head填入
+		if len(headSet) > 0 {
+			for k, v := range headSet {
+				req.Header.Add(k, v)
+			}
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			statusCode = resp.StatusCode
+			respHeaderExact = resp.Header.Get(exactHeader)
+
+			/*var reader io.ReadCloser
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				reader, err = gzip.NewReader(resp.Body)
+				if err != nil {
+					src = err.Error()
+					statusCode = 503
+				}
+			} else {
+				reader = resp.Body
+			}*/
+
+			body, err := ioutil.ReadAll(resp.Body)
+
+			if err == nil {
+				src = string(body)
+			} else {
+				LogsWithFileName("", "http_error", url+err.Error())
+				src = err.Error()
+				statusCode = 503
+			}
+		} else {
+			LogsWithFileName("", "http_error", url+err.Error())
+			src = err.Error()
+			statusCode = 503
+		}
+	}
+	return src, statusCode, respHeaderExact
+}
+
+/**
 * 模拟https的POST请求
 * @url		string	需要发送请求的url
 * @method	string	请求方式，POST，GET，PUT等
@@ -446,6 +729,153 @@ func HttpsRequest(url, method, body, charset, contentType string, sslCert []byte
 }
 
 /**
+* 模拟https的POST请求
+* @url		string	需要发送请求的url
+* @method	string	请求方式，POST，GET，PUT等
+* @body		string	需要传递的值
+* @charset	string	字符编码
+* @contentType string 定义http请求的文档格式，默认string
+* @sslCert	[]byte	证书主体
+* @sslKey	[]byte	证书密钥
+* @headSet	map[string] string	请求需要带上的头
+ */
+func HttpsRequestWithRespExactHeader(url, method, body, charset, contentType, exactHeader string, sslCert []byte, sslKey []byte, headSet map[string]string) (string, int, string) {
+	src := ""
+	statusCode := 101
+	httpStart := true
+	respHeaderExact := ""
+
+	_tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	if len(sslCert) > 1 {
+		//加载安全证书
+		cert, err := tls.X509KeyPair(sslCert, sslKey)
+
+		if err != nil {
+			return "证书加载失败", statusCode, ""
+		}
+
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(sslCert)
+		_tlsConfig = &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: true,
+		}
+	}
+
+	if len(charset) < 1 {
+		charset = "utf-8"
+	}
+	if len(method) < 1 {
+		method = "POST"
+	}
+	sContentType := "text/html"
+	if method == "POST" {
+		sContentType = "application/x-www-form-urlencoded"
+	}
+	if len(contentType) < 1 {
+		contentType = sContentType
+	}
+
+	var req *http.Request
+	var err error
+	var ioread io.Reader
+
+	if len(body) > 0 {
+		ioread = strings.NewReader(body)
+	}
+
+	//连续10次尝试
+	for i := 0; i < 10; i++ {
+		req, err = http.NewRequest(method, url, ioread)
+		if err == nil {
+			//如果成功了，跳出
+			httpStart = true
+			break
+		}
+	}
+	//如果10次尝试后，都不能连接
+	if err != nil {
+		LogsWithFileName("", "http_error", url+"\n"+err.Error())
+		return err.Error(), 503, respHeaderExact
+	}
+
+	//使用完连接后关闭
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+
+	tr := &http.Transport{TLSClientConfig: _tlsConfig,
+		DisableKeepAlives: true,
+		Dial: func(netw, addr string) (net.Conn, error) {
+			c, err := net.DialTimeout(netw, addr, time.Second*30) //设置建立连接超时
+			if err != nil {
+				return nil, err
+			}
+			c.SetDeadline(time.Now().Add(5 * time.Second)) //设置发送接收数据超时
+			return c, nil
+		}}
+	client := &http.Client{Transport: tr}
+
+	//只有连接成功后，才会写入头的读取字节流
+	if httpStart == true {
+		//模拟一个host
+		sHost := ""
+		u, err := c_url.Parse(url)
+		if err == nil {
+			sHost = u.Host
+		}
+		//接收的格式
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		//连接使用后关闭
+		req.Header.Set("Connection", "close")
+		//设置host
+		req.Header.Set("Host", sHost)
+		//前一个网页
+		req.Header.Set("Referer", sHost)
+		//设置字符集和文档类型
+		req.Header.Set("Content-Type", fmt.Sprintf("%s;charset=%s;", contentType, charset))
+		//设置浏览器
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36")
+		for k, v := range headSet {
+			req.Header.Add(k, v)
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+
+			defer resp.Body.Close()
+			statusCode = resp.StatusCode
+			respHeaderExact = resp.Header.Get(exactHeader)
+			/*var reader io.ReadCloser
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				reader, err = gzip.NewReader(resp.Body)
+				if err != nil {
+					src = err.Error()
+					statusCode = 503
+				}
+			} else {
+				reader = resp.Body
+			}*/
+
+			contents, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				src = string(contents)
+			} else {
+				LogsWithFileName("", "http_error", url+"\n"+err.Error())
+				src = err.Error()
+				statusCode = 503
+			}
+		} else {
+			LogsWithFileName("", "http_error", url+"\n"+err.Error())
+			src = err.Error()
+			statusCode = 503
+		}
+	}
+	return src, statusCode, respHeaderExact
+}
+
+/**
 * 模拟http请求，携带cookie
 * @url		string  需要抓取的url
 * @method	string	请求方式，POST，GET，PUT等
@@ -588,4 +1018,21 @@ func HttpRequestByCookie(url, method, body, charset, contentType string, headSet
 		}
 	}
 	return src, statusCode, cookies
+}
+
+func HttpEazyFormRequestWithRespExactHeader(url string, method string, pams string, params map[string]string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
+
+	//func (c *Client) Post(url, contentType string, body io.Reader) (resp *Response, err error) {
+	//	req, err := NewRequest("POST", url, body)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	req.Header.Set("Content-Type", contentType)
+	//	return c.Do(req)
+	//}
+
+	values, _ := c_url.ParseQuery(pams)
+	resp, _ := http.PostForm(url, values)
+	body, _ := ioutil.ReadAll(resp.Body)
+	return string(body), resp.StatusCode, ""
 }
