@@ -1019,20 +1019,3 @@ func HttpRequestByCookie(url, method, body, charset, contentType string, headSet
 	}
 	return src, statusCode, cookies
 }
-
-func HttpEazyFormRequestWithRespExactHeader(url string, method string, pams string, params map[string]string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
-
-	//func (c *Client) Post(url, contentType string, body io.Reader) (resp *Response, err error) {
-	//	req, err := NewRequest("POST", url, body)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	req.Header.Set("Content-Type", contentType)
-	//	return c.Do(req)
-	//}
-
-	values, _ := c_url.ParseQuery(pams)
-	resp, _ := http.PostForm(url, values)
-	body, _ := ioutil.ReadAll(resp.Body)
-	return string(body), resp.StatusCode, ""
-}
