@@ -440,14 +440,19 @@ func HttpRequestWithRespExactHeader(url, method, body, charset, contentType, exa
 
 /**
 * 模拟http 表单请求
+* @Author : Jackie
+* @Description : 表单请求 params格式  key=value&key=value&key=value
+
 * @url		string  需要抓取的url
 * @method	string	请求方式，POST，GET，PUT等
 * @body		string	需要传递的值
 * @charset	string	字符编码
 * @contentType string 定义http请求的文档格式，默认string
+* @exactHeader string 用户需要返回某些指定的resp_header
 * @headSet	map[string] string	请求需要带上的头
+
  */
-func HttpFormRequestWithRespExactHeader(url string, method string, pams string, params map[string]string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
+func HttpFormRequestWithRespExactHeader(url string, method string, params string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
 	src := ""
 	httpStart := false
 
@@ -471,7 +476,7 @@ func HttpFormRequestWithRespExactHeader(url string, method string, pams string, 
 	var req *http.Request
 	var err error
 
-	values, _ := c_url.ParseQuery(pams)
+	values, _ := c_url.ParseQuery(params)
 	//连续10次尝试
 	for i := 0; i < 10; i++ {
 		req, err = http.NewRequest(method, url, strings.NewReader(values.Encode()))
@@ -481,12 +486,7 @@ func HttpFormRequestWithRespExactHeader(url string, method string, pams string, 
 			break
 		}
 	}
-	//req.PostForm=values
-	//err = req.ParseForm()
-	//
-	//fmt.Println(err)
 
-	//如果10次尝试后，都不能连接
 	if err != nil {
 		LogsWithFileName("", "http_error", url+err.Error())
 		return err.Error(), 503, ""
@@ -552,17 +552,6 @@ func HttpFormRequestWithRespExactHeader(url string, method string, pams string, 
 			defer resp.Body.Close()
 			statusCode = resp.StatusCode
 			respHeaderExact = resp.Header.Get(exactHeader)
-
-			/*var reader io.ReadCloser
-			if resp.Header.Get("Content-Encoding") == "gzip" {
-				reader, err = gzip.NewReader(resp.Body)
-				if err != nil {
-					src = err.Error()
-					statusCode = 503
-				}
-			} else {
-				reader = resp.Body
-			}*/
 
 			body, err := ioutil.ReadAll(resp.Body)
 
