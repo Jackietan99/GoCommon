@@ -551,8 +551,9 @@ func HttpFormRequestWithRespExactHeader(url string, method string, params string
 		if err == nil {
 			defer resp.Body.Close()
 			statusCode = resp.StatusCode
-			respHeaderExact = resp.Header.Get(exactHeader)
-
+			if exactHeader != "" {
+				respHeaderExact = resp.Header.Get(exactHeader)
+			}
 			/*var reader io.ReadCloser
 			if resp.Header.Get("Content-Encoding") == "gzip" {
 				reader, err = gzip.NewReader(resp.Body)
