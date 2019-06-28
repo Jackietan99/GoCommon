@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -1007,4 +1008,17 @@ func HttpRequestByCookie(url, method, body, charset, contentType string, headSet
 		}
 	}
 	return src, statusCode, cookies
+}
+
+func HttpRequestByCustomContentType(apiUrl string, method string, bodyRequest []byte, contentType string) (msg string) {
+	request, err := http.NewRequest(method, apiUrl, bytes.NewBuffer(bodyRequest))
+	request.Header.Set("Content-Type", contentType)
+	client := &http.Client{}
+	resp, err := client.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	return string(body)
 }
