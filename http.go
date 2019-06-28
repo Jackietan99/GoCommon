@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -440,12 +441,17 @@ func HttpRequestWithRespExactHeader(url, method, body, charset, contentType, exa
 
 /**
 * 模拟http 表单请求
+* @Author : Jackie
+* @Description : 表单请求 params格式  key=value&key=value&key=value
+
 * @url		string  需要抓取的url
 * @method	string	请求方式，POST，GET，PUT等
 * @body		string	需要传递的值
 * @charset	string	字符编码
 * @contentType string 定义http请求的文档格式，默认string
+* @exactHeader string 用户需要返回某些指定的resp_header
 * @headSet	map[string] string	请求需要带上的头
+
  */
 func HttpFormRequestWithRespExactHeader(url string, method string, params string, charset, contentType, exactHeader string, headSet map[string]string) (string, int, string) {
 	src := ""
@@ -481,12 +487,7 @@ func HttpFormRequestWithRespExactHeader(url string, method string, params string
 			break
 		}
 	}
-	//req.PostForm=values
-	//err = req.ParseForm()
-	//
-	//fmt.Println(err)
 
-	//如果10次尝试后，都不能连接
 	if err != nil {
 		LogsWithFileName("", "http_error", url+err.Error())
 		return err.Error(), 503, ""
@@ -551,19 +552,7 @@ func HttpFormRequestWithRespExactHeader(url string, method string, params string
 		if err == nil {
 			defer resp.Body.Close()
 			statusCode = resp.StatusCode
-			if exactHeader != "" {
-				respHeaderExact = resp.Header.Get(exactHeader)
-			}
-			/*var reader io.ReadCloser
-			if resp.Header.Get("Content-Encoding") == "gzip" {
-				reader, err = gzip.NewReader(resp.Body)
-				if err != nil {
-					src = err.Error()
-					statusCode = 503
-				}
-			} else {
-				reader = resp.Body
-			}*/
+			respHeaderExact = resp.Header.Get(exactHeader)
 
 			body, err := ioutil.ReadAll(resp.Body)
 
@@ -1019,4 +1008,17 @@ func HttpRequestByCookie(url, method, body, charset, contentType string, headSet
 		}
 	}
 	return src, statusCode, cookies
+}
+
+func HttpRequestByCustomContentType(apiUrl string, method string, bodyRequest []byte, contentType string) (msg string) {
+	request, err := http.NewRequest(method, apiUrl, bytes.NewBuffer(bodyRequest))
+	request.Header.Set("Content-Type", contentType)
+	client := &http.Client{}
+	resp, err := client.Do(request)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	return string(body)
 }
